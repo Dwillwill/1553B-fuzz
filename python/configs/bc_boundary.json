@@ -1,0 +1,15 @@
+{
+  "seed": 1,
+  "delay_100ns": 1000,
+  "rt_targets": [0, 1, 2, 30, 31],
+  "subaddresses": [0, 1, 2, 30, 31],
+  "word_counts": [0, 1, 2, 16, 31],
+  "mode_codes": [0, 1, 2, 4, 5, 8, 16, 17, 31],
+  "strategies": [
+    "cmd_boundary",
+    "mode_code",
+    "broadcast",
+    "rt_to_rt",
+    "data_pattern"
+  ]
+}

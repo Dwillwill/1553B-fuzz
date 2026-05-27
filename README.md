@@ -2,15 +2,17 @@
 
 Early-stage MIL-STD-1553B fuzzing tooling.
 
-This repository currently contains a thin C/C++ board adapter for the vendor
-1553B card API. The adapter is designed to be called later from a Python fuzz
-engine through `ctypes` or from small native smoke-test programs.
+This repository currently contains:
+
+- a thin C/C++ board adapter for the vendor 1553B card API
+- a Python fuzz runner with offline `mock` execution and native `ctypes` support
 
 ## Repository Scope
 
 Included:
 
 - `board_adapter/`: C ABI wrapper around the vendor `mil1553api` library.
+- `python/`: Python fuzz case generation, mock backend, native backend, and replay tooling.
 - `.gitignore`: excludes vendor delivery materials and local build outputs.
 
 Not included:
@@ -49,11 +51,41 @@ Implemented:
 - load one or more fuzz cases into BCCB/CDP entries
 - start/stop/wait for BC execution
 - read back CDP result fields
+- Python fuzz case model
+- command-word boundary fuzzing
+- mode-code fuzzing
+- broadcast fuzzing
+- RT-to-RT case generation
+- fixed data-pattern fuzzing
+- seeded random fuzzing
+- JSONL run logs
+- case replay
+- offline mock backend
+- native `ctypes` backend
+
+Python dry run:
+
+```bat
+set PYTHONPATH=python
+python -m mil1553_fuzz.runner run --dry-run --config python\configs\bc_boundary.json --limit 20 --out runs\dryrun.jsonl
+```
+
+Python mock execution:
+
+```bat
+set PYTHONPATH=python
+python -m mil1553_fuzz.runner run --backend mock --config python\configs\bc_boundary.json --limit 20 --out runs\mock.jsonl
+```
+
+Native execution on the board machine:
+
+```bat
+set PYTHONPATH=python
+python -m mil1553_fuzz.runner run --backend native --dll-path board_adapter\mil1553_board_adapter.dll --config python\configs\bc_boundary.json --limit 20 --out runs\native.jsonl
+```
 
 Planned:
 
-- Python `ctypes` binding
-- command-word boundary fuzzing
-- mode-code fuzzing
 - sequence insertion fuzzing
 - RT fault simulation
+- result analysis and triage summaries

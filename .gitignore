@@ -9,6 +9,7 @@
 
 # Local build outputs.
 /.tools/
+/runs/
 /board_adapter/*.dll
 /board_adapter/*.exe
 /board_adapter/*.exp
