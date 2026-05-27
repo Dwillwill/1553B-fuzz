@@ -10,6 +10,13 @@
 # Local build outputs.
 /.tools/
 /runs/
+__pycache__/
+*.py[cod]
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/
+/venv/
+/.venv/
 /board_adapter/*.dll
 /board_adapter/*.exe
 /board_adapter/*.exp
