@@ -1,0 +1,28 @@
+# Vendor delivery package. Keep these local; do not publish driver binaries,
+# documentation, examples, installers, or copied SDK libraries.
+/DOC/
+/Example/
+/Linux/
+/Linux_RT/
+/SetUp/
+/Windows/
+
+# Local build outputs.
+/.tools/
+/board_adapter/*.dll
+/board_adapter/*.exe
+/board_adapter/*.exp
+/board_adapter/*.ilk
+/board_adapter/*.lib
+/board_adapter/*.obj
+/board_adapter/*.pdb
+/board_adapter/*.so
+/board_adapter/smoke_bc_once
+
+# Editor and OS noise.
+.vs/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
