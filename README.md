@@ -77,11 +77,25 @@ set PYTHONPATH=python
 python -m mil1553_fuzz.runner run --backend mock --config python\configs\bc_boundary.json --limit 20 --out runs\mock.jsonl
 ```
 
+Python GUI:
+
+```bat
+run_fuzz_gui.bat
+```
+
 Native execution on the board machine:
 
 ```bat
 set PYTHONPATH=python
-python -m mil1553_fuzz.runner run --backend native --dll-path board_adapter\mil1553_board_adapter.dll --config python\configs\bc_boundary.json --limit 20 --out runs\native.jsonl
+python -m mil1553_fuzz.runner run --backend native --dll-path board_adapter\mil1553_board_adapter.dll --config python\configs\bc_boundary.json --limit 20 --interval-ms 200 --bus A --out runs\native.jsonl
+```
+
+If a vendor UI is already using BM on the same machine, use `--no-reset` so the
+fuzz runner does not clear the UI-side monitor setup:
+
+```bat
+set PYTHONPATH=python
+python -m mil1553_fuzz.runner run --backend native --no-reset --dll-path board_adapter\mil1553_board_adapter.dll --strategy cmd_boundary --strategy data_pattern --limit 100 --interval-ms 200 --bus A --out runs\native_ui_bm.jsonl
 ```
 
 Planned:

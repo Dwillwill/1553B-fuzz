@@ -4,10 +4,11 @@ import argparse
 import json
 from pathlib import Path
 import sys
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 from .adapters import BoardAdapter
-from .cases import FuzzCase, event_record
+from .cases import FuzzCase
+from .campaign import apply_bus, repeat_cases, run_campaign, write_dry_run
 from .ctypes_adapter import CtypesAdapter, default_adapter_path
 from .mock_adapter import MockAdapter
 from .strategies import StrategyConfig, generate_cases
@@ -27,8 +28,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     run_parser.add_argument("--limit", type=int, default=20)
     run_parser.add_argument("--seed", type=int, default=1)
     run_parser.add_argument("--timeout-ms", type=int, default=3000)
+    run_parser.add_argument("--interval-ms", type=int, default=0)
+    run_parser.add_argument("--repeat-each", type=int, default=1)
+    run_parser.add_argument("--bus", choices=["A", "B"], default="A")
     run_parser.add_argument("--out", default="runs/latest.jsonl")
     run_parser.add_argument("--dry-run", action="store_true")
+    run_parser.add_argument("--no-reset", action="store_true")
     run_parser.set_defaults(func=run_command)
 
     replay_parser = subparsers.add_parser("replay", help="replay one case from a JSONL run log")
@@ -36,8 +41,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     replay_parser.add_argument("--input", required=True, help="JSONL run log")
     replay_parser.add_argument("--case-id", required=True)
     replay_parser.add_argument("--timeout-ms", type=int, default=3000)
+    replay_parser.add_argument("--interval-ms", type=int, default=0)
+    replay_parser.add_argument("--repeat-each", type=int, default=1)
+    replay_parser.add_argument("--bus", choices=["A", "B"], default="A")
     replay_parser.add_argument("--out", default="runs/replay.jsonl")
     replay_parser.add_argument("--dry-run", action="store_true")
+    replay_parser.add_argument("--no-reset", action="store_true")
     replay_parser.set_defaults(func=replay_command)
 
     args = parser.parse_args(argv)
@@ -49,34 +58,37 @@ def run_command(args: argparse.Namespace) -> int:
     seed = int(config_data.get("seed", args.seed))
     config = StrategyConfig.from_dict(config_data, seed=seed)
     strategies = args.strategies or list(config_data.get("strategies", DEFAULT_STRATEGIES))
-    cases = list(generate_cases(strategies, config, args.limit))
+    cases = _prepare_cases(list(generate_cases(strategies, config, args.limit)), args)
 
-    _write_records(args.out, _execute_cases(args, cases))
+    _execute_or_write(args, cases)
     print("generated=%d output=%s backend=%s dry_run=%s" % (len(cases), args.out, args.backend, args.dry_run))
     return 0
 
 
 def replay_command(args: argparse.Namespace) -> int:
-    case = _find_case(args.input, args.case_id)
-    _write_records(args.out, _execute_cases(args, [case]))
+    case = _prepare_cases([_find_case(args.input, args.case_id)], args)[0]
+    _execute_or_write(args, [case])
     print("replayed=%s output=%s backend=%s dry_run=%s" % (case.case_id, args.out, args.backend, args.dry_run))
     return 0
 
 
-def _execute_cases(args: argparse.Namespace, cases: Sequence[FuzzCase]) -> Iterable[Dict[str, object]]:
+def _prepare_cases(cases: Sequence[FuzzCase], args: argparse.Namespace) -> Sequence[FuzzCase]:
+    return list(repeat_cases(list(apply_bus(cases, args.bus)), args.repeat_each))
+
+
+def _execute_or_write(args: argparse.Namespace, cases: Sequence[FuzzCase]) -> None:
     if args.dry_run:
-        for case in cases:
-            yield event_record(case, "generated")
+        write_dry_run(cases, args.out)
         return
 
     adapter = _make_adapter(args)
-    adapter.open()
-    try:
-        for case in cases:
-            readback = adapter.run_case(case, args.timeout_ms)
-            yield event_record(case, "executed", readback)
-    finally:
-        adapter.close()
+    run_campaign(
+        adapter=adapter,
+        cases=cases,
+        timeout_ms=args.timeout_ms,
+        interval_ms=args.interval_ms,
+        out_path=args.out,
+    )
 
 
 def _make_adapter(args: argparse.Namespace) -> BoardAdapter:
@@ -88,17 +100,9 @@ def _make_adapter(args: argparse.Namespace) -> BoardAdapter:
             card_index=args.card_index,
             channel=args.channel,
             timeout_ms=args.timeout_ms,
+            reset_on_open=not args.no_reset,
         )
     raise ValueError("unknown backend: %s" % args.backend)
-
-
-def _write_records(path: str, records: Iterable[Dict[str, object]]) -> None:
-    out_path = Path(path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w", encoding="utf-8") as fp:
-        for record in records:
-            fp.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
-            fp.write("\n")
 
 
 def _find_case(path: str, case_id: str) -> FuzzCase:

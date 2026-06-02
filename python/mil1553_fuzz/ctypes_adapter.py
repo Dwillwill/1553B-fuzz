@@ -54,11 +54,13 @@ class CtypesAdapter(BoardAdapter):
         card_index: int = 0,
         channel: int = 0,
         timeout_ms: int = 3000,
+        reset_on_open: bool = True,
     ) -> None:
         self.dll_path = str(Path(dll_path))
         self.card_index = card_index
         self.channel = channel
         self.timeout_ms = timeout_ms
+        self.reset_on_open = reset_on_open
         self._lib = _load_library(self.dll_path)
         self._adapter = ctypes.c_void_p()
         self._opened = False
@@ -71,7 +73,8 @@ class CtypesAdapter(BoardAdapter):
             "open",
         )
         self._opened = True
-        self._check(self._lib.mil1553_adapter_reset(self._adapter), "reset")
+        if self.reset_on_open:
+            self._check(self._lib.mil1553_adapter_reset(self._adapter), "reset")
 
     def close(self) -> None:
         if self._adapter:

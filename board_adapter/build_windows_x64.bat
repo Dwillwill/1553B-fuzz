@@ -15,4 +15,16 @@ cl /nologo /EHsc /W4 ^
   "%VENDOR_DIR%\mil1553api.lib" ^
   /link /OUT:smoke_bc_once.exe
 
+cl /nologo /EHsc /W4 ^
+  /I"%VENDOR_DIR%" ^
+  selftest_bc_rt_bm.cpp ^
+  "%VENDOR_DIR%\mil1553api.lib" ^
+  /link /OUT:selftest_bc_rt_bm.exe
+
+cl /nologo /EHsc /W4 ^
+  /I"%VENDOR_DIR%" ^
+  bc_send_for_ui_bm.cpp ^
+  "%VENDOR_DIR%\mil1553api.lib" ^
+  /link /OUT:bc_send_for_ui_bm.exe
+
 endlocal

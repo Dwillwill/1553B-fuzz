@@ -31,7 +31,7 @@ Build `board_adapter\mil1553_board_adapter.dll` first, then run:
 
 ```bat
 set PYTHONPATH=python
-python -m mil1553_fuzz.runner run --backend native --dll-path board_adapter\mil1553_board_adapter.dll --config python\configs\bc_boundary.json --limit 20 --out runs\native.jsonl
+python -m mil1553_fuzz.runner run --backend native --dll-path board_adapter\mil1553_board_adapter.dll --config python\configs\bc_boundary.json --limit 20 --interval-ms 200 --bus A --out runs\native.jsonl
 ```
 
 The native backend opens the board, resets it, loads one fuzz case at a time
@@ -46,6 +46,21 @@ python -m mil1553_fuzz.runner replay --backend mock --input runs\mock.jsonl --ca
 
 Use the same command with `--backend native` and `--dll-path` on the board
 machine to replay against hardware.
+
+## GUI
+
+From the repository root:
+
+```bat
+run_fuzz_gui.bat
+```
+
+The GUI uses the same case generator and adapters as the command line runner.
+Use `Mock` for laptop testing and `Native` on the board machine.
+
+For the use case where the vendor UI is already running BM, enable `No reset on
+open` in the GUI. This avoids clearing the UI-side BM setup before sending BC
+fuzz cases.
 
 ## Current Strategies
 
