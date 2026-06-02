@@ -164,19 +164,19 @@ class CtypesAdapter(BoardAdapter):
 
 
 def default_adapter_path() -> str:
-    root = Path(__file__).resolve().parents[2]
     if sys.platform.startswith("win"):
-        return str(root / "board_adapter" / "mil1553_board_adapter.dll")
-    return str(root / "board_adapter" / "libmil1553_board_adapter.so")
+        return str(Path("board_adapter") / "mil1553_board_adapter.dll")
+    return str(Path("board_adapter") / "libmil1553_board_adapter.so")
 
 
 def _load_library(path: str) -> ctypes.CDLL:
+    resolved_path = Path(path).resolve()
     if sys.platform.startswith("win"):
         if hasattr(os, "add_dll_directory"):
-            dll_dir = str(Path(path).resolve().parent)
+            dll_dir = str(resolved_path.parent)
             os.add_dll_directory(dll_dir)
-        return ctypes.WinDLL(path)
-    return ctypes.CDLL(path)
+        return ctypes.WinDLL(str(resolved_path))
+    return ctypes.CDLL(str(resolved_path))
 
 
 def _to_native_case(case: FuzzCase) -> NativeFuzzCase:

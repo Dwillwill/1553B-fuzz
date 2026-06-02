@@ -83,6 +83,24 @@ Python GUI:
 run_fuzz_gui.bat
 ```
 
+Offline deployment layout:
+
+```text
+1553B-fuzz\
+  run_fuzz_gui.bat
+  python\
+  board_adapter\
+    mil1553_board_adapter.dll
+    mil1553api.dll
+```
+
+Run `run_fuzz_gui.bat` from the copied folder. The default native DLL path is
+relative:
+
+```text
+board_adapter\mil1553_board_adapter.dll
+```
+
 Native execution on the board machine:
 
 ```bat
