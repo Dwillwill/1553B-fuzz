@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import threading
 import time
 from typing import Callable, Dict, Iterable, Iterator, Optional, Sequence
 
@@ -42,15 +43,23 @@ def run_campaign(
     interval_ms: int,
     out_path: str,
     progress: Optional[ProgressCallback] = None,
+    stop_event: Optional[threading.Event] = None,
 ) -> int:
     output = Path(out_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     count = 0
 
+    if stop_event is not None and stop_event.is_set():
+        return 0
+
     adapter.open()
     try:
         with output.open("w", encoding="utf-8") as fp:
             for index, case in enumerate(cases, start=1):
+                if stop_event is not None and stop_event.is_set():
+                    adapter.stop()
+                    break
+
                 readback = adapter.run_case(case, timeout_ms)
                 record = event_record(case, "executed", readback)
                 fp.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
@@ -60,18 +69,36 @@ def run_campaign(
                 if progress is not None:
                     progress(index, case, record)
                 if interval_ms > 0 and index < len(cases):
-                    time.sleep(interval_ms / 1000.0)
+                    if stop_event is not None:
+                        if stop_event.wait(interval_ms / 1000.0):
+                            adapter.stop()
+                            break
+                    else:
+                        time.sleep(interval_ms / 1000.0)
     finally:
+        if stop_event is not None and stop_event.is_set():
+            try:
+                adapter.stop()
+            except Exception:
+                pass
         adapter.close()
 
     return count
 
 
-def write_dry_run(cases: Sequence[FuzzCase], out_path: str) -> int:
+def write_dry_run(
+    cases: Sequence[FuzzCase],
+    out_path: str,
+    stop_event: Optional[threading.Event] = None,
+) -> int:
     output = Path(out_path)
     output.parent.mkdir(parents=True, exist_ok=True)
+    count = 0
     with output.open("w", encoding="utf-8") as fp:
         for case in cases:
+            if stop_event is not None and stop_event.is_set():
+                break
             fp.write(json.dumps(event_record(case, "generated"), ensure_ascii=False, sort_keys=True))
             fp.write("\n")
-    return len(cases)
+            count += 1
+    return count

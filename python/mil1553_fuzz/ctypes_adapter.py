@@ -4,6 +4,7 @@ import ctypes
 import os
 from pathlib import Path
 import sys
+import threading
 from typing import Optional
 
 from .adapters import AdapterError, BoardAdapter
@@ -64,23 +65,38 @@ class CtypesAdapter(BoardAdapter):
         self._lib = _load_library(self.dll_path)
         self._adapter = ctypes.c_void_p()
         self._opened = False
+        self._lifecycle_lock = threading.RLock()
         self._bind_functions()
 
     def open(self) -> None:
-        self._check(self._lib.mil1553_adapter_create(ctypes.byref(self._adapter)), "create")
-        self._check(
-            self._lib.mil1553_adapter_open(self._adapter, self.card_index, self.channel),
-            "open",
-        )
-        self._opened = True
-        if self.reset_on_open:
-            self._check(self._lib.mil1553_adapter_reset(self._adapter), "reset")
+        with self._lifecycle_lock:
+            self._check(self._lib.mil1553_adapter_create(ctypes.byref(self._adapter)), "create")
+            try:
+                self._check(
+                    self._lib.mil1553_adapter_open(self._adapter, self.card_index, self.channel),
+                    "open",
+                )
+                self._opened = True
+                if self.reset_on_open:
+                    self._check(self._lib.mil1553_adapter_reset(self._adapter), "reset")
+            except Exception:
+                self._lib.mil1553_adapter_destroy(self._adapter)
+                self._adapter = ctypes.c_void_p()
+                self._opened = False
+                raise
 
     def close(self) -> None:
-        if self._adapter:
-            self._lib.mil1553_adapter_destroy(self._adapter)
-        self._adapter = ctypes.c_void_p()
-        self._opened = False
+        with self._lifecycle_lock:
+            if self._adapter:
+                self._lib.mil1553_adapter_destroy(self._adapter)
+            self._adapter = ctypes.c_void_p()
+            self._opened = False
+
+    def stop(self) -> None:
+        with self._lifecycle_lock:
+            if not self._adapter or not self._opened:
+                return
+            self._check(self._lib.mil1553_adapter_bc_stop(self._adapter), "bc_stop")
 
     def run_case(self, case: FuzzCase, timeout_ms: int) -> Readback:
         if not self._opened:
@@ -142,6 +158,8 @@ class CtypesAdapter(BoardAdapter):
         self._lib.mil1553_adapter_bc_start.restype = ctypes.c_uint32
         self._lib.mil1553_adapter_bc_wait_done.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
         self._lib.mil1553_adapter_bc_wait_done.restype = ctypes.c_uint32
+        self._lib.mil1553_adapter_bc_stop.argtypes = [ctypes.c_void_p]
+        self._lib.mil1553_adapter_bc_stop.restype = ctypes.c_uint32
         self._lib.mil1553_adapter_bc_readback.argtypes = [
             ctypes.c_void_p,
             ctypes.c_uint16,

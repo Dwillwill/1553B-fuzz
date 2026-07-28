@@ -19,6 +19,9 @@ class BoardAdapter(ABC):
     def run_case(self, case: FuzzCase, timeout_ms: int) -> Readback:
         raise NotImplementedError
 
+    def stop(self) -> None:
+        """Request an active hardware operation to stop."""
+
     def run_cases(self, cases: Sequence[FuzzCase], timeout_ms: int) -> Sequence[Readback]:
         return [self.run_case(case, timeout_ms) for case in cases]
 

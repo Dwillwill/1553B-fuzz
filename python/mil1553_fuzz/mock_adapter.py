@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import itertools
-from typing import Optional
 
 from .adapters import BoardAdapter
 from .cases import FuzzCase, Readback
@@ -24,6 +23,9 @@ class MockAdapter(BoardAdapter):
         self._opened = True
 
     def close(self) -> None:
+        self._opened = False
+
+    def stop(self) -> None:
         self._opened = False
 
     def run_case(self, case: FuzzCase, timeout_ms: int) -> Readback:

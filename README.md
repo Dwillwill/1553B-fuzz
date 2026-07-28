@@ -83,7 +83,11 @@ Python GUI:
 run_fuzz_gui.bat
 ```
 
-Offline deployment layout:
+## Offline Board Machine Deployment
+
+The board machine only needs Python 3.10+ and the installed vendor driver.
+Visual Studio is not required at runtime. Copy the whole project directory and
+keep this relative layout:
 
 ```text
 1553B-fuzz\
@@ -92,14 +96,32 @@ Offline deployment layout:
   board_adapter\
     mil1553_board_adapter.dll
     mil1553api.dll
+    smoke_bc_once.exe
+    selftest_bc_rt_bm.exe
+    bc_send_for_ui_bm.exe
 ```
 
-Run `run_fuzz_gui.bat` from the copied folder. The default native DLL path is
-relative:
+Start the GUI from the project root:
+
+```bat
+run_fuzz_gui.bat
+```
+
+The default adapter path is relative to the project root:
 
 ```text
 board_adapter\mil1553_board_adapter.dll
 ```
+
+An optional standalone build can be produced on a development machine:
+
+```bat
+build_gui_exe.bat
+```
+
+The GUI provides a `停止测试` button. Closing the window during a campaign
+first requests `BCStop`, waits for the worker thread to release the adapter,
+and only then exits.
 
 Native execution on the board machine:
 
