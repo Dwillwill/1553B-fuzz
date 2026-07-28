@@ -10,6 +10,7 @@
 # Local build outputs.
 /.tools/
 /runs/
+/diagnostics/
 /build/
 /dist/
 *.spec

@@ -117,6 +117,12 @@ The GUI provides a `停止测试` button. Closing the window during a campaign
 first requests `BCStop`, waits for the worker thread to release the adapter,
 and only then exits.
 
+If Windows reports a driver blue screen, stop board testing and run
+`collect_bsod_diagnostics.bat` as administrator after rebooting. The script
+does not call the board API. It records relevant driver/device information and
+copies the newest minidump into the local `diagnostics` directory. Do not
+publish that directory to a public repository.
+
 Native execution on the board machine:
 
 ```bat
