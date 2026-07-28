@@ -113,12 +113,6 @@ The default adapter path is relative to the project root:
 board_adapter\mil1553_board_adapter.dll
 ```
 
-An optional standalone build can be produced on a development machine:
-
-```bat
-build_gui_exe.bat
-```
-
 The GUI provides a `停止测试` button. Closing the window during a campaign
 first requests `BCStop`, waits for the worker thread to release the adapter,
 and only then exits.
