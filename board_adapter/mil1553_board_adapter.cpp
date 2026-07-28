@@ -1,5 +1,6 @@
 #include "mil1553_board_adapter.h"
 
+#include <atomic>
 #include <stddef.h>
 #include <string.h>
 
@@ -18,7 +19,10 @@ struct Mil1553Adapter {
     uint8_t channel;
     uint32_t last_vendor_status;
     int is_open;
+    int bc_mode_enabled;
     int bc_prepared;
+    int bc_running;
+    std::atomic<int> stop_requested;
 };
 
 static uint32_t map_vendor_status(Mil1553Adapter *adapter, uint32_t status)
@@ -55,7 +59,10 @@ uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_create(Mil1553Adapter **out_adapte
     adapter->channel = 0;
     adapter->last_vendor_status = RET_SUCCESS;
     adapter->is_open = 0;
+    adapter->bc_mode_enabled = 0;
     adapter->bc_prepared = 0;
+    adapter->bc_running = 0;
+    adapter->stop_requested.store(0);
     *out_adapter = adapter;
     return MIL1553_ADAPTER_OK;
 }
@@ -90,7 +97,10 @@ uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_open(
 
     adapter->channel = channel;
     adapter->is_open = 1;
+    adapter->bc_mode_enabled = 0;
     adapter->bc_prepared = 0;
+    adapter->bc_running = 0;
+    adapter->stop_requested.store(0);
     adapter->last_vendor_status = RET_SUCCESS;
     return MIL1553_ADAPTER_OK;
 }
@@ -104,12 +114,19 @@ uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_close(Mil1553Adapter *adapter)
         return MIL1553_ADAPTER_OK;
     }
 
-    MIL1553_BCStop(adapter->handle, adapter->channel);
-    MIL1553_BC_MODE_Disable(adapter->handle, adapter->channel);
+    if (adapter->bc_running) {
+        MIL1553_BCStop(adapter->handle, adapter->channel);
+    }
+    if (adapter->bc_mode_enabled) {
+        MIL1553_BC_MODE_Disable(adapter->handle, adapter->channel);
+    }
     uint32_t ret = MIL1553_DeviceClose(adapter->handle);
     adapter->handle = -1;
     adapter->is_open = 0;
+    adapter->bc_mode_enabled = 0;
     adapter->bc_prepared = 0;
+    adapter->bc_running = 0;
+    adapter->stop_requested.store(0);
     return map_vendor_status(adapter, ret);
 }
 
@@ -122,8 +139,13 @@ uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_reset(Mil1553Adapter *adapter)
         return MIL1553_ADAPTER_ERR_NOT_OPEN;
     }
 
-    adapter->bc_prepared = 0;
-    return map_vendor_status(adapter, MIL1553_DeviceReset(adapter->handle, adapter->channel));
+    uint32_t ret = MIL1553_DeviceReset(adapter->handle, adapter->channel);
+    if (ret == RET_SUCCESS) {
+        adapter->bc_mode_enabled = 0;
+        adapter->bc_prepared = 0;
+        adapter->bc_running = 0;
+    }
+    return map_vendor_status(adapter, ret);
 }
 
 uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_prepare(
@@ -142,6 +164,7 @@ uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_prepare(
     if (ret != RET_SUCCESS) {
         return map_vendor_status(adapter, ret);
     }
+    adapter->bc_mode_enabled = 1;
 
     ret = MIL1553_BCInit(adapter->handle, adapter->channel, max_msg_count, subframe_count);
     if (ret != RET_SUCCESS) {
@@ -238,9 +261,11 @@ uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_start(
         return MIL1553_ADAPTER_ERR_NOT_OPEN;
     }
 
-    return map_vendor_status(
-        adapter,
-        MIL1553_BCStart(adapter->handle, adapter->channel, start_msg_num));
+    uint32_t ret = MIL1553_BCStart(adapter->handle, adapter->channel, start_msg_num);
+    if (ret == RET_SUCCESS) {
+        adapter->bc_running = 1;
+    }
+    return map_vendor_status(adapter, ret);
 }
 
 uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_wait_done(
@@ -256,22 +281,43 @@ uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_wait_done(
 
     uint32_t waited = 0;
     for (;;) {
+        if (adapter->stop_requested.load() != 0) {
+            uint32_t stop_ret = MIL1553_BCStop(adapter->handle, adapter->channel);
+            if (stop_ret != RET_SUCCESS) {
+                return map_vendor_status(adapter, stop_ret);
+            }
+            adapter->bc_running = 0;
+            adapter->last_vendor_status = RET_SUCCESS;
+            return MIL1553_ADAPTER_ERR_CANCELLED;
+        }
+
         uint32_t is_running = 0;
         uint32_t ret = MIL1553_BCIsRunning(adapter->handle, adapter->channel, &is_running);
         if (ret != RET_SUCCESS) {
             return map_vendor_status(adapter, ret);
         }
         if (is_running == 0) {
+            adapter->bc_running = 0;
             adapter->last_vendor_status = RET_SUCCESS;
             return MIL1553_ADAPTER_OK;
         }
         if (timeout_ms != 0 && waited >= timeout_ms) {
             MIL1553_BCStop(adapter->handle, adapter->channel);
+            adapter->bc_running = 0;
             return MIL1553_ADAPTER_ERR_API_BASE | 0xffffu;
         }
         sleep_ms(1);
         ++waited;
     }
+}
+
+uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_request_stop(Mil1553Adapter *adapter)
+{
+    if (adapter == NULL) {
+        return MIL1553_ADAPTER_ERR_BAD_ARG;
+    }
+    adapter->stop_requested.store(1);
+    return MIL1553_ADAPTER_OK;
 }
 
 uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_stop(Mil1553Adapter *adapter)
@@ -282,7 +328,11 @@ uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_stop(Mil1553Adapter *adapter)
     if (!adapter->is_open) {
         return MIL1553_ADAPTER_ERR_NOT_OPEN;
     }
-    return map_vendor_status(adapter, MIL1553_BCStop(adapter->handle, adapter->channel));
+    uint32_t ret = MIL1553_BCStop(adapter->handle, adapter->channel);
+    if (ret == RET_SUCCESS) {
+        adapter->bc_running = 0;
+    }
+    return map_vendor_status(adapter, ret);
 }
 
 uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_readback(

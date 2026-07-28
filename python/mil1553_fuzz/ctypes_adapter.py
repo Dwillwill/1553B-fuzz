@@ -65,6 +65,7 @@ class CtypesAdapter(BoardAdapter):
         self._lib = _load_library(self.dll_path)
         self._adapter = ctypes.c_void_p()
         self._opened = False
+        self._bc_prepared = False
         self._lifecycle_lock = threading.RLock()
         self._bind_functions()
 
@@ -79,10 +80,13 @@ class CtypesAdapter(BoardAdapter):
                 self._opened = True
                 if self.reset_on_open:
                     self._check(self._lib.mil1553_adapter_reset(self._adapter), "reset")
+                self._check(self._lib.mil1553_adapter_bc_prepare(self._adapter, 1, 0), "bc_prepare")
+                self._bc_prepared = True
             except Exception:
                 self._lib.mil1553_adapter_destroy(self._adapter)
                 self._adapter = ctypes.c_void_p()
                 self._opened = False
+                self._bc_prepared = False
                 raise
 
     def close(self) -> None:
@@ -91,20 +95,25 @@ class CtypesAdapter(BoardAdapter):
                 self._lib.mil1553_adapter_destroy(self._adapter)
             self._adapter = ctypes.c_void_p()
             self._opened = False
+            self._bc_prepared = False
 
     def stop(self) -> None:
         with self._lifecycle_lock:
-            if not self._adapter or not self._opened:
+            if not self._adapter:
                 return
-            self._check(self._lib.mil1553_adapter_bc_stop(self._adapter), "bc_stop")
+            self._check(
+                self._lib.mil1553_adapter_request_stop(self._adapter),
+                "request_stop",
+            )
 
     def run_case(self, case: FuzzCase, timeout_ms: int) -> Readback:
         if not self._opened:
             raise AdapterError("native adapter is not open")
+        if not self._bc_prepared:
+            raise AdapterError("native BC is not prepared")
 
         native_case = _to_native_case(case)
         native_readback = NativeReadback()
-        self._check(self._lib.mil1553_adapter_bc_prepare(self._adapter, 1, 0), "bc_prepare")
         self._check(
             self._lib.mil1553_adapter_bc_load_cases(
                 self._adapter,
@@ -158,6 +167,8 @@ class CtypesAdapter(BoardAdapter):
         self._lib.mil1553_adapter_bc_start.restype = ctypes.c_uint32
         self._lib.mil1553_adapter_bc_wait_done.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
         self._lib.mil1553_adapter_bc_wait_done.restype = ctypes.c_uint32
+        self._lib.mil1553_adapter_request_stop.argtypes = [ctypes.c_void_p]
+        self._lib.mil1553_adapter_request_stop.restype = ctypes.c_uint32
         self._lib.mil1553_adapter_bc_stop.argtypes = [ctypes.c_void_p]
         self._lib.mil1553_adapter_bc_stop.restype = ctypes.c_uint32
         self._lib.mil1553_adapter_bc_readback.argtypes = [

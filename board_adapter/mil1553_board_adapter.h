@@ -25,6 +25,7 @@ enum {
     MIL1553_ADAPTER_OK = 0,
     MIL1553_ADAPTER_ERR_BAD_ARG = 0x10001,
     MIL1553_ADAPTER_ERR_NOT_OPEN = 0x10002,
+    MIL1553_ADAPTER_ERR_CANCELLED = 0x10003,
     MIL1553_ADAPTER_ERR_API_BASE = 0x20000
 };
 
@@ -88,6 +89,10 @@ MIL1553_ADAPTER_API uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_start(
 MIL1553_ADAPTER_API uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_wait_done(
     Mil1553Adapter *adapter,
     uint32_t timeout_ms);
+
+/* Thread-safe: records a cancellation request without calling the vendor API. */
+MIL1553_ADAPTER_API uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_request_stop(
+    Mil1553Adapter *adapter);
 
 MIL1553_ADAPTER_API uint32_t MIL1553_ADAPTER_CALL mil1553_adapter_bc_stop(Mil1553Adapter *adapter);
 
