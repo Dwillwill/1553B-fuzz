@@ -52,12 +52,10 @@ Implemented:
 - start/stop/wait for BC execution
 - read back CDP result fields
 - Python fuzz case model
-- command-word boundary fuzzing
-- mode-code fuzzing
-- broadcast fuzzing
-- RT-to-RT case generation
-- fixed data-pattern fuzzing
-- seeded random fuzzing
+- nine independent 1553B business test scenarios
+- bit-level command-word mutation
+- structured command-field mutation
+- semantic-sensitive command mutation
 - JSONL run logs
 - case replay
 - offline mock backend
@@ -67,14 +65,14 @@ Python dry run:
 
 ```bat
 set PYTHONPATH=python
-python -m mil1553_fuzz.runner run --dry-run --config python\configs\bc_boundary.json --limit 20 --out runs\dryrun.jsonl
+python -m mil1553_fuzz.runner run --dry-run --config python\configs\scenario_campaign.json --limit 30 --out runs\dryrun.jsonl
 ```
 
 Python mock execution:
 
 ```bat
 set PYTHONPATH=python
-python -m mil1553_fuzz.runner run --backend mock --config python\configs\bc_boundary.json --limit 20 --out runs\mock.jsonl
+python -m mil1553_fuzz.runner run --backend mock --config python\configs\scenario_campaign.json --limit 30 --out runs\mock.jsonl
 ```
 
 Python GUI:
@@ -127,7 +125,7 @@ Native execution on the board machine:
 
 ```bat
 set PYTHONPATH=python
-python -m mil1553_fuzz.runner run --backend native --dll-path board_adapter\mil1553_board_adapter.dll --config python\configs\bc_boundary.json --limit 20 --interval-ms 200 --bus A --out runs\native.jsonl
+python -m mil1553_fuzz.runner run --backend native --dll-path board_adapter\mil1553_board_adapter.dll --config python\configs\scenario_campaign.json --limit 30 --interval-ms 200 --bus A --out runs\native.jsonl
 ```
 
 If a vendor UI is already using BM on the same machine, use `--no-reset` so the
@@ -135,7 +133,7 @@ fuzz runner does not clear the UI-side monitor setup:
 
 ```bat
 set PYTHONPATH=python
-python -m mil1553_fuzz.runner run --backend native --no-reset --dll-path board_adapter\mil1553_board_adapter.dll --strategy cmd_boundary --strategy data_pattern --limit 100 --interval-ms 200 --bus A --out runs\native_ui_bm.jsonl
+python -m mil1553_fuzz.runner run --backend native --no-reset --dll-path board_adapter\mil1553_board_adapter.dll --scenario bc_rt_control --scenario rt_bc_data_report --strategy bit_level --strategy semantic --limit 100 --interval-ms 200 --bus A --out runs\native_ui_bm.jsonl
 ```
 
 Planned:

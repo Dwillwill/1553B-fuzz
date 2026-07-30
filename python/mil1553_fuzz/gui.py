@@ -9,17 +9,27 @@ from typing import Dict, List, Optional
 from .adapters import BoardAdapter
 from .campaign import apply_bus, repeat_cases, run_campaign, write_dry_run
 from .ctypes_adapter import CtypesAdapter, default_adapter_path
+from .generation import generate_scenario_fuzz_cases
 from .mock_adapter import MockAdapter
-from .strategies import StrategyConfig, generate_cases
+from .scenarios import ScenarioConfig
 
 
 STRATEGIES = [
-    ("cmd_boundary", "命令字边界"),
-    ("mode_code", "模式码"),
-    ("broadcast", "广播"),
-    ("rt_to_rt", "RT到RT"),
-    ("data_pattern", "数据模式"),
-    ("random", "随机变异"),
+    ("bit_level", "位级扰动"),
+    ("structured", "结构化模糊"),
+    ("semantic", "语义敏感模糊"),
+]
+
+SCENARIOS = [
+    ("bc_rt_control", "BC→RT 单终端控制下发"),
+    ("bc_rt_sync_data", "BC→RT 同步数据"),
+    ("bc_broadcast_data", "BC→RT 广播数据"),
+    ("bc_broadcast_sync_data", "BC→RTs 广播同步数据"),
+    ("bc_broadcast_sync_no_data", "BC→RT 广播同步指令（无数据）"),
+    ("rt2_rt3_transfer", "RT2→RT3 数据通信"),
+    ("last_command_readback", "Last Command 回读"),
+    ("bc_query_rt_status", "BC 查询 RT 状态"),
+    ("rt_bc_data_report", "RT→BC 数据上报"),
 ]
 
 
@@ -27,8 +37,8 @@ class FuzzGui(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("1553B BC 模糊测试工具")
-        self.geometry("1000x750")
-        self.minsize(900, 660)
+        self.geometry("1120x900")
+        self.minsize(960, 760)
         self.option_add("*Font", ("Microsoft YaHei UI", 9))
 
         self.messages: "queue.Queue[object]" = queue.Queue()
@@ -46,19 +56,22 @@ class FuzzGui(tk.Tk):
         self.no_reset = tk.BooleanVar(value=False)
         self.dry_run = tk.BooleanVar(value=False)
         self.rt_targets = tk.StringVar(value="1")
+        self.rt2_source = tk.StringVar(value="2")
+        self.rt3_destination = tk.StringVar(value="3")
         self.subaddresses = tk.StringVar(value="1")
-        self.word_counts = tk.StringVar(value="0,1,2,16,31")
-        self.mode_codes = tk.StringVar(value="0,1,2,4,5,8,16,17,31")
-        self.limit = tk.StringVar(value="50")
+        self.word_counts = tk.StringVar(value="1,2,16,0")
+        self.limit = tk.StringVar(value="100")
         self.repeat_each = tk.StringVar(value="1")
         self.interval_ms = tk.StringVar(value="200")
         self.timeout_ms = tk.StringVar(value="3000")
         self.seed = tk.StringVar(value="1")
         self.out_path = tk.StringVar(value="runs/gui_latest.jsonl")
         self.status_text = tk.StringVar(value="就绪")
+        self.scenario_vars: Dict[str, tk.BooleanVar] = {
+            name: tk.BooleanVar(value=True) for name, _ in SCENARIOS
+        }
         self.strategy_vars: Dict[str, tk.BooleanVar] = {
-            name: tk.BooleanVar(value=(name in {"cmd_boundary", "mode_code", "data_pattern"}))
-            for name, _ in STRATEGIES
+            name: tk.BooleanVar(value=True) for name, _ in STRATEGIES
         }
 
         self._build()
@@ -70,7 +83,7 @@ class FuzzGui(tk.Tk):
         root.pack(fill=tk.BOTH, expand=True)
         root.columnconfigure(0, weight=0)
         root.columnconfigure(1, weight=1)
-        root.rowconfigure(3, weight=1)
+        root.rowconfigure(4, weight=1)
 
         backend_frame = ttk.LabelFrame(root, text="运行后端")
         backend_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
@@ -93,10 +106,11 @@ class FuzzGui(tk.Tk):
             ("板卡编号", self.card_index, "entry"),
             ("通道编号", self.channel, "entry"),
             ("总线", self.bus, "bus"),
-            ("RT 地址", self.rt_targets, "entry"),
-            ("子地址", self.subaddresses, "entry"),
+            ("目标 RT 地址", self.rt_targets, "entry"),
+            ("RT2 发送端", self.rt2_source, "entry"),
+            ("RT3 接收端", self.rt3_destination, "entry"),
+            ("普通子地址", self.subaddresses, "entry"),
             ("数据字数", self.word_counts, "entry"),
-            ("模式码", self.mode_codes, "entry"),
         ]
         for row, (label, var, field_type) in enumerate(fields):
             ttk.Label(target_frame, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=5)
@@ -132,25 +146,36 @@ class FuzzGui(tk.Tk):
 
         ttk.Button(campaign_frame, text="选择...", command=self._browse_output).grid(row=5, column=2, padx=8, pady=5)
 
-        strategy_frame = ttk.LabelFrame(root, text="变异策略")
-        strategy_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        scenario_frame = ttk.LabelFrame(root, text="测试场景")
+        scenario_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        for index, (name, label) in enumerate(SCENARIOS):
+            ttk.Checkbutton(scenario_frame, text=label, variable=self.scenario_vars[name]).grid(
+                row=index // 3,
+                column=index % 3,
+                padx=10,
+                pady=5,
+                sticky="w",
+            )
+
+        strategy_frame = ttk.LabelFrame(root, text="测试策略")
+        strategy_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         for index, (name, label) in enumerate(STRATEGIES):
             ttk.Checkbutton(strategy_frame, text=label, variable=self.strategy_vars[name]).grid(
                 row=0, column=index, padx=10, pady=8, sticky="w"
             )
 
-        self.log = scrolledtext.ScrolledText(root, height=18, wrap=tk.WORD, font=("Consolas", 9))
-        self.log.grid(row=3, column=0, columnspan=2, sticky="nsew")
+        self.log = scrolledtext.ScrolledText(root, height=14, wrap=tk.WORD, font=("Consolas", 9))
+        self.log.grid(row=4, column=0, columnspan=2, sticky="nsew")
 
         progress_frame = ttk.Frame(root)
-        progress_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(10, 4))
+        progress_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(10, 4))
         progress_frame.columnconfigure(0, weight=1)
         self.progress = ttk.Progressbar(progress_frame, mode="determinate")
         self.progress.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         ttk.Label(progress_frame, textvariable=self.status_text, width=24).grid(row=0, column=1, sticky="e")
 
         actions = ttk.Frame(root)
-        actions.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        actions.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         actions.columnconfigure(3, weight=1)
         self.run_button = ttk.Button(actions, text="开始测试", command=self._run)
         self.run_button.grid(row=0, column=0, padx=(0, 8))
@@ -190,21 +215,31 @@ class FuzzGui(tk.Tk):
         self.progress.configure(maximum=len(config["cases"]), value=0)
         self._set_running(True)
         self._log(
-            "开始测试：后端=%s，总线=%s，用例数=%d"
-            % ("真实板卡" if config["backend"] == "native" else "模拟", config["bus"], len(config["cases"]))
+            "开始测试：后端=%s，总线=%s，场景=%d，策略=%d，用例数=%d"
+            % (
+                "真实板卡" if config["backend"] == "native" else "模拟",
+                config["bus"],
+                len(config["scenarios"]),
+                len(config["strategies"]),
+                len(config["cases"]),
+            )
         )
         self.worker = threading.Thread(target=self._worker_run, args=(config,), daemon=False)
         self.worker.start()
 
     def _collect_config(self) -> Dict[str, object]:
-        selected = [name for name, var in self.strategy_vars.items() if var.get()]
-        if not selected:
+        selected_scenarios = [name for name, var in self.scenario_vars.items() if var.get()]
+        if not selected_scenarios:
+            raise ValueError("请至少选择一个测试场景。")
+        selected_strategies = [name for name, var in self.strategy_vars.items() if var.get()]
+        if not selected_strategies:
             raise ValueError("请至少选择一种变异策略。")
 
-        rt_targets = _parse_int_list(self.rt_targets.get(), "RT 地址", 0, 31)
-        subaddresses = _parse_int_list(self.subaddresses.get(), "子地址", 0, 31)
+        rt_targets = _parse_int_list(self.rt_targets.get(), "目标 RT 地址", 0, 30)
+        rt2_source = _parse_int(self.rt2_source.get(), "RT2 发送端", 0, 30)
+        rt3_destination = _parse_int(self.rt3_destination.get(), "RT3 接收端", 0, 30)
+        subaddresses = _parse_int_list(self.subaddresses.get(), "普通子地址", 1, 30)
         word_counts = _parse_int_list(self.word_counts.get(), "数据字数", 0, 31)
-        mode_codes = _parse_int_list(self.mode_codes.get(), "模式码", 0, 31)
         limit = _parse_int(self.limit.get(), "用例数量上限", 1, 1_000_000)
         repeat_each = _parse_int(self.repeat_each.get(), "每条重复次数", 1, 10_000)
         interval_ms = _parse_int(self.interval_ms.get(), "发送间隔", 0, 86_400_000)
@@ -213,15 +248,23 @@ class FuzzGui(tk.Tk):
         card_index = _parse_int(self.card_index.get(), "板卡编号", 0, 255)
         channel = _parse_int(self.channel.get(), "通道编号", 0, 255)
 
-        strategy_config = StrategyConfig(
+        scenario_config = ScenarioConfig(
             rt_targets=rt_targets,
             subaddresses=subaddresses,
             word_counts=word_counts,
-            mode_codes=mode_codes,
+            rt2_source=rt2_source,
+            rt3_destination=rt3_destination,
             delay_100ns=1000,
             seed=seed,
         )
-        cases = list(generate_cases(selected, strategy_config, limit))
+        cases = list(
+            generate_scenario_fuzz_cases(
+                selected_scenarios,
+                selected_strategies,
+                scenario_config,
+                limit,
+            )
+        )
         cases = list(repeat_cases(list(apply_bus(cases, self.bus.get())), repeat_each))
         if not cases:
             raise ValueError("没有生成任何测试用例，请检查参数。")
@@ -239,6 +282,8 @@ class FuzzGui(tk.Tk):
             "timeout_ms": timeout_ms,
             "interval_ms": interval_ms,
             "out_path": self.out_path.get(),
+            "scenarios": selected_scenarios,
+            "strategies": selected_strategies,
             "cases": cases,
         }
 
@@ -316,11 +361,13 @@ class FuzzGui(tk.Tk):
         readback = record.get("readback", {})
         self.messages.put(("__PROGRESS__", index))
         self.messages.put(
-            "[%04d] %s CMD1=%s CDP_STS=%s RT_STS1=%s"
+            "[%04d] 场景=%s 策略=%s CMD1=%s CMD2=%s CDP_STS=%s RT_STS1=%s"
             % (
                 index,
-                case.case_id,
+                case.scenario,
+                case.strategy,
                 case.to_dict()["cmd1"],
+                case.to_dict()["cmd2"] or "-",
                 readback.get("cdp_sts", "-"),
                 readback.get("rt_sts1", "-"),
             )

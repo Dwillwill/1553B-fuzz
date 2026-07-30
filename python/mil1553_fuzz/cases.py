@@ -42,6 +42,7 @@ class FuzzCase:
     tx_rx: int
     subaddr: int
     word_count: int
+    scenario: str = ""
     data_words: List[int] = field(default_factory=lambda: [0] * DATA_WORDS)
     is_rt_to_rt: int = 0
     rt2_addr: int = 0
@@ -68,6 +69,7 @@ class FuzzCase:
             tx_rx=_u8(self.tx_rx),
             subaddr=_u8(self.subaddr),
             word_count=_u8(self.word_count),
+            scenario=self.scenario,
             data_words=[_u32(word) for word in words],
             is_rt_to_rt=1 if self.is_rt_to_rt else 0,
             rt2_addr=_u8(self.rt2_addr),
@@ -102,6 +104,7 @@ class FuzzCase:
         case = self.normalized()
         return {
             "case_id": case.case_id,
+            "scenario": case.scenario,
             "strategy": case.strategy,
             "rt_addr": case.rt_addr,
             "tx_rx": case.tx_rx,
@@ -135,6 +138,7 @@ class FuzzCase:
             tx_rx=_parse_int(data.get("tx_rx", 0)),
             subaddr=_parse_int(data.get("subaddr", 0)),
             word_count=_parse_int(data.get("word_count", 0)),
+            scenario=str(data.get("scenario", "")),
             data_words=words,
             is_rt_to_rt=_parse_int(data.get("is_rt_to_rt", 0)),
             rt2_addr=_parse_int(data.get("rt2_addr", 0)),

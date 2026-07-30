@@ -1,0 +1,25 @@
+{
+  "scenarios": [
+    "bc_rt_control",
+    "bc_rt_sync_data",
+    "bc_broadcast_data",
+    "bc_broadcast_sync_data",
+    "bc_broadcast_sync_no_data",
+    "rt2_rt3_transfer",
+    "last_command_readback",
+    "bc_query_rt_status",
+    "rt_bc_data_report"
+  ],
+  "strategies": [
+    "bit_level",
+    "structured",
+    "semantic"
+  ],
+  "rt_targets": [1],
+  "rt2_source": 2,
+  "rt3_destination": 3,
+  "subaddresses": [1],
+  "word_counts": [1, 2, 16, 0],
+  "delay_100ns": 1000,
+  "seed": 1
+}

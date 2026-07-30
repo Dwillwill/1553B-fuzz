@@ -10,11 +10,23 @@ from .adapters import BoardAdapter
 from .cases import FuzzCase
 from .campaign import apply_bus, repeat_cases, run_campaign, write_dry_run
 from .ctypes_adapter import CtypesAdapter, default_adapter_path
+from .generation import generate_scenario_fuzz_cases
 from .mock_adapter import MockAdapter
+from .mutations import MUTATION_STRATEGY_NAMES
+from .scenarios import SCENARIO_NAMES, ScenarioConfig
 from .strategies import StrategyConfig, generate_cases
 
 
-DEFAULT_STRATEGIES = ["cmd_boundary", "mode_code", "broadcast", "rt_to_rt", "data_pattern"]
+LEGACY_STRATEGIES = {
+    "cmd_boundary",
+    "mode_code",
+    "broadcast",
+    "rt_to_rt",
+    "data_pattern",
+    "random",
+}
+DEFAULT_STRATEGIES = list(MUTATION_STRATEGY_NAMES)
+DEFAULT_SCENARIOS = list(SCENARIO_NAMES)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -24,6 +36,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     run_parser = subparsers.add_parser("run", help="generate and run fuzz cases")
     _add_backend_args(run_parser)
     run_parser.add_argument("--config", help="JSON campaign config")
+    run_parser.add_argument("--scenario", action="append", dest="scenarios")
     run_parser.add_argument("--strategy", action="append", dest="strategies")
     run_parser.add_argument("--limit", type=int, default=20)
     run_parser.add_argument("--seed", type=int, default=1)
@@ -56,12 +69,42 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 def run_command(args: argparse.Namespace) -> int:
     config_data = _load_json(args.config) if args.config else {}
     seed = int(config_data.get("seed", args.seed))
-    config = StrategyConfig.from_dict(config_data, seed=seed)
     strategies = args.strategies or list(config_data.get("strategies", DEFAULT_STRATEGIES))
-    cases = _prepare_cases(list(generate_cases(strategies, config, args.limit)), args)
+    legacy_selected = [name for name in strategies if name in LEGACY_STRATEGIES]
+    modern_selected = [name for name in strategies if name in MUTATION_STRATEGY_NAMES]
+    if legacy_selected and modern_selected:
+        raise ValueError("legacy and scenario-based strategies cannot be mixed")
+
+    if legacy_selected:
+        legacy_config = StrategyConfig.from_dict(config_data, seed=seed)
+        generated = list(generate_cases(strategies, legacy_config, args.limit))
+        scenarios = []
+    else:
+        scenarios = args.scenarios or list(config_data.get("scenarios", DEFAULT_SCENARIOS))
+        scenario_config = ScenarioConfig.from_dict(config_data, seed=seed)
+        generated = list(
+            generate_scenario_fuzz_cases(
+                scenarios,
+                strategies,
+                scenario_config,
+                args.limit,
+            )
+        )
+
+    cases = _prepare_cases(generated, args)
 
     _execute_or_write(args, cases)
-    print("generated=%d output=%s backend=%s dry_run=%s" % (len(cases), args.out, args.backend, args.dry_run))
+    print(
+        "generated=%d scenarios=%d strategies=%d output=%s backend=%s dry_run=%s"
+        % (
+            len(cases),
+            len(scenarios),
+            len(strategies),
+            args.out,
+            args.backend,
+            args.dry_run,
+        )
+    )
     return 0
 
 
