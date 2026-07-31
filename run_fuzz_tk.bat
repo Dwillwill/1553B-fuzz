@@ -9,5 +9,5 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-python -m mil1553_fuzz.web_gui
+python -m mil1553_fuzz.gui
 endlocal

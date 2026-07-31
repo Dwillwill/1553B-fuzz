@@ -81,6 +81,15 @@ Python GUI:
 run_fuzz_gui.bat
 ```
 
+The default GUI is a local Web workspace served only on `127.0.0.1`. All HTML,
+CSS, and JavaScript assets are included in the project, so it works on the
+offline board machine without Node.js, a package installation, or internet
+access. The original Tkinter interface remains available through:
+
+```bat
+run_fuzz_tk.bat
+```
+
 ## Offline Board Machine Deployment
 
 The board machine only needs Python 3.10+ and the installed vendor driver.

@@ -56,14 +56,17 @@ run_fuzz_gui.bat
 ```
 
 The GUI uses the same case generator and adapters as the command line runner.
-Use `模拟后端` for laptop testing and `真实板卡` on the board machine. The board
-machine needs Python 3.10+ and the vendor driver, but does not need Visual
-Studio. Keep `python`, `board_adapter`, and `run_fuzz_gui.bat` in their original
-relative locations when copying the project.
+`run_fuzz_gui.bat` starts an offline local Web workspace and opens it in the
+default browser. Use `模拟后端` for laptop testing and `真实板卡` on the board
+machine. The board machine needs Python 3.10+ and the vendor driver, but does
+not need Visual Studio, Node.js, or internet access. Keep `python`,
+`board_adapter`, and `run_fuzz_gui.bat` in their original relative locations
+when copying the project. `run_fuzz_tk.bat` starts the original Tkinter fallback.
 
 The GUI is localized in Chinese and supports safe cancellation. `停止测试` sets
-a campaign cancellation event and calls the native adapter's `BCStop`. Closing
-the window while a campaign is active follows the same stop-and-wait process.
+a campaign cancellation event and calls the native adapter's `BCStop`. The Web
+workspace also sends a stop request when the page closes and has a server-side
+heartbeat timeout in case the browser disappears unexpectedly.
 
 For the use case where the vendor UI is already running BM, enable `No reset on
 open` in the GUI. This avoids clearing the UI-side BM setup before sending BC
